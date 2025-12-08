@@ -109,7 +109,7 @@ async def main():
             
             #upload file
             '''
-            filename = "framed_IMG_0181.png"
+            filename = "images/IMG_0256.JPG"
             content_id = None
             if filename:
                 with open(filename, "rb") as f:
@@ -118,7 +118,16 @@ async def main():
                 content_id = await tv.upload(file_data, file_type=file_type)
                 content_id = os.path.splitext(content_id)[0]    #remove file extension if any (eg .jpg)
                 logging.info('uploaded {} to tv as {}'.format(filename, content_id))
-                
+            '''    
+            #or
+            '''
+            filename = "images/IMG_0256.JPG"
+            content_id = None
+            if filename:
+                content_id = await tv.upload(filename)
+                content_id = os.path.splitext(content_id)[0]    #remove file extension if any (eg .jpg)
+                logging.info('uploaded {} to tv as {}'.format(filename, content_id))
+    
             #delete art on tv
             if content_id:
                 await tv.delete_list([content_id])

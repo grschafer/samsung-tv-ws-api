@@ -9,14 +9,16 @@ SPDX-License-Identifier: LGPL-3.0
 """
 
 from datetime import datetime
-import os
 import json
 import logging
 import random
+from pathlib import Path
 import socket
 from typing import Any, Dict, List, Optional, Union
+from urllib.parse import urlparse
 import uuid
 
+import requests
 import websocket
 
 from . import exceptions, helper
@@ -90,7 +92,7 @@ class SamsungTVArt(SamsungTVWSConnection):
     def get_uuid(self):
         self.art_uuid = str(uuid.uuid4())
         return self.art_uuid
-        
+
     def get_websocket_message(self):
         try:
             raw_data = self.connection.recv()
@@ -103,7 +105,7 @@ class SamsungTVArt(SamsungTVWSConnection):
         except websocket.WebSocketTimeoutException as e:
             raise exceptions.TimeoutError('Websocket Time out: {}'.format(e))
         return {}
-        
+
     def wait_for_response(self, wait_for_event, request_uuid=None):
         while True:
             data = self.get_websocket_message()
@@ -175,7 +177,7 @@ class SamsungTVArt(SamsungTVWSConnection):
         )
         assert data
         return data
-        
+
     def set_favourite(self, content_id, status="on"):
         status = "on" if is_true(status) else "off"
         data = self._send_art_request(
@@ -186,7 +188,7 @@ class SamsungTVArt(SamsungTVWSConnection):
         )
         assert data
         return data
-        
+
     def get_artmode_settings(self, setting=''):
         '''
         setting can be any of 'brightness', 'color_temperature', 'motion_sensitivity',
@@ -207,7 +209,7 @@ class SamsungTVArt(SamsungTVWSConnection):
         )
         assert data
         return data
- 
+
     def set_auto_rotation_status(self, duration=0, type=True, category=2):
         '''
         duration is "off" or "number" where number is duration in minutes. set 0 for 'off'
@@ -256,7 +258,7 @@ class SamsungTVArt(SamsungTVWSConnection):
         )
         assert data
         return data
-        
+
     def get_color_temperature(self):
         try:
             data = self.get_artmode_settings('color_temperature')
@@ -274,7 +276,7 @@ class SamsungTVArt(SamsungTVWSConnection):
         )
         assert data
         return data
-        
+
     def set_brightness_sensor_setting(self, value):
         value = "on" if is_true(value) else "off"
         data = self._send_art_request(
@@ -282,7 +284,7 @@ class SamsungTVArt(SamsungTVWSConnection):
         )
         assert data
         return data
-        
+
     def set_motion_timer(self, value):
         # "off", "5", "15", "30", "60", "120","240" 
         data = self._send_art_request(
@@ -290,7 +292,7 @@ class SamsungTVArt(SamsungTVWSConnection):
         )
         assert data
         return data
-        
+
     def set_motion_sensitivity(self, value):
         # "1" to "3"
         data = self._send_art_request(
@@ -298,7 +300,7 @@ class SamsungTVArt(SamsungTVWSConnection):
         )
         assert data
         return data
- 
+
     def get_thumbnail_list(self, content_id_list=[]):
         if isinstance(content_id_list, str):
             content_id_list=[content_id_list]
@@ -371,14 +373,68 @@ class SamsungTVArt(SamsungTVWSConnection):
 
         return thumbnail_data_dict if as_dict else list(thumbnail_data_dict.values()) if len(content_id_list) > 1 else thumbnail_data
 
-    def upload(self, file, matte="shadowbox_polar", portrait_matte="shadowbox_polar", file_type="png", date=None):
+    def upload(self, file, matte="shadowbox_polar", portrait_matte="shadowbox_polar", file_type="png", date=None, CHUNK_SIZE=64*1024):
+        '''
+        NOTE: both id's and request_id have to be the same
+        
+        Handle uploading images from different source types.
+        An image can be one of:
+            a) a file path to an image on the local disk
+            b) a url for an image on the web
+            c) a series of bytes being directly passed to this method
+        Both a) and b) will be passed as strings, so we use urlparse to see if it has a scheme,
+        which makes it a URL.
+        High quality images will be large, and reading them into memory can be inefficient, so we
+        define several methods above to yield their contents in CHUNK_SIZE pieces.
+        '''
+        def _bytes_chunker(data):
+            '''
+            Return the bytes in CHUNK_SIZE pieces
+            '''
+            for pos in range(0, len(data)+1, CHUNK_SIZE):
+                yield data[pos: pos+CHUNK_SIZE]
+
+        def _stream_chunker(url):
+            '''
+            Stream the image, yielding CHUNK_SIZE pieces
+            '''
+            with requests.get(url, stream=True) as response:
+                response.raise_for_status()
+                for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
+                    if chunk:  # filter out keep-alive chunks
+                        yield chunk
+
+        def _file_chunker(pth):
+            '''
+            Read the image file, yielding CHUNK_SIZE pieces
+            '''
+            with open(pth, "rb") as f:
+                while True:
+                    chunk = f.read(CHUNK_SIZE)
+                    if not chunk:
+                        break  # End of file
+                    yield chunk
+ 
         if isinstance(file, str):
-            file_name, file_extension = os.path.splitext(file)
-            file_type = file_extension[1:]
-            with open(file, 'rb') as f:
-                file = f.read()
-                
-        file_size = len(file)
+            pth = Path(file)
+            file_name = pth.stem
+            file_type = pth.suffix[1:]
+
+            # Check if the string is a URL for a remote image file
+            url_parts = urlparse(file)
+            if url_parts.scheme:
+                resp = requests.head(file)
+                file_size = int(resp.headers.get("Content-Length", 0))
+                chunker = _stream_chunker
+            else:
+                # It must be a file path
+                file_size = pth.stat().st_size
+                chunker = _file_chunker
+        else:
+            # Received the raw bytes for an image. `file_type` must be passed if it is not `.png`
+            file_size = len(file)
+            chunker = _bytes_chunker
+
         file_type = file_type.lower()
         if file_type == "jpeg":
             file_type = "jpg"
@@ -398,8 +454,8 @@ class SamsungTVArt(SamsungTVWSConnection):
                     "id": self.art_uuid,
                 },
                 "image_date": date,
-                "matte_id": matte or 'none',
-                "portrait_matte_id": portrait_matte or 'none',
+                "matte_id": matte or "none",
+                "portrait_matte_id": portrait_matte or "none",
                 "file_size": file_size,
             },
             wait_for_event="ready_to_use"
@@ -419,13 +475,14 @@ class SamsungTVArt(SamsungTVWSConnection):
         )
 
         art_socket_raw = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        art_socket = get_ssl_context().wrap_socket(art_socket_raw) if conn_info.get('secured', False) else art_socket_raw  
+        art_socket = get_ssl_context().wrap_socket(art_socket_raw) if conn_info.get("secured", False) else art_socket_raw  
         art_socket.connect((conn_info["ip"], int(conn_info["port"])))
         art_socket.send(len(header).to_bytes(4, "big"))
         art_socket.send(header.encode("ascii"))
-        art_socket.send(file)
-        #_LOGGING.info('sending: header length: {}, header: {}'.format(len(header).to_bytes(4, "big").hex(), header.encode("ascii")))
-
+        #art_socket.send(file)
+        # Send the image contents in chunks
+        for chunk in chunker(file):
+            art_socket.send(chunk)
         data = self.wait_for_response("image_added")
         return data["content_id"] if data else None
 
@@ -470,7 +527,7 @@ class SamsungTVArt(SamsungTVWSConnection):
                 "value": mode,
             }
         )
-        
+
     def get_rotation(self):
         data = self._send_art_request(
             {"request": "get_current_rotation"}

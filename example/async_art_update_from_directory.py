@@ -602,7 +602,7 @@ async def main():
     args.folder = os.path.normpath(args.folder)
     
     if not os.path.exists(args.folder):
-        self.log.warning('folder {} does not exist, exiting'.format(args.folder))
+        log.warning('folder {} does not exist, exiting'.format(args.folder))
         os._exit(1)
     
     mon = monitor_and_display(  args.ip,

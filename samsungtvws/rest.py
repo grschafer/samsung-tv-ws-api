@@ -9,11 +9,14 @@ SPDX-License-Identifier: LGPL-3.0
 import logging
 from typing import Any, Dict, Optional
 
+import urllib3
 import requests
 
 from . import connection, exceptions, helper
 
 _LOGGING = logging.getLogger(__name__)
+# Disable InsecureRequestWarning
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 class SamsungTVRest(connection.SamsungTVWSBaseConnection):
