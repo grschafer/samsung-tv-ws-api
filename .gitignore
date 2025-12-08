@@ -146,6 +146,7 @@ example/web_interface/gps_data.json
 example/images/
 example/slideshow/
 example/test.py
+example/service.py
 example/*.txt
 example/*.jpg
 example/*.png

@@ -3,7 +3,7 @@ SamsungTVWS - Samsung Smart TV WS API wrapper
 
 Copyright (C) 2019 DSR! <xchwarze@gmail.com>
 Copyright (C) 2021 Matthew Garrett <mjg59@srcf.ucam.org>
-Copyright (C) 2024 Nick Waterton <n.waterton@outlook.com>
+Copyright (C) 2024,2025 Nick Waterton <n.waterton@outlook.com>
 
 SPDX-License-Identifier: LGPL-3.0
 """
@@ -24,7 +24,7 @@ from .command import SamsungTVCommand
 from .connection import SamsungTVWSConnection
 from .event import D2D_SERVICE_MESSAGE_EVENT, MS_CHANNEL_READY_EVENT
 from .rest import SamsungTVRest
-from .helper import get_ssl_context
+from .helper import get_ssl_context, is_true
 
 _LOGGING = logging.getLogger(__name__)
 
@@ -86,7 +86,7 @@ class SamsungTVArt(SamsungTVWSConnection):
             raise exceptions.ConnectionFailure(response)
 
         return self.connection
-        
+
     def get_uuid(self):
         self.art_uuid = str(uuid.uuid4())
         return self.art_uuid
@@ -167,7 +167,7 @@ class SamsungTVArt(SamsungTVWSConnection):
             {"request": "get_content_list", "category": category}
         )
         assert data
-        return [ v for v in json.loads(data["content_list"]) if v['category_id'] == category] if category else json.loads(data["content_list"])
+        return [ v for v in json.loads(data["content_list"]) if v["category_id"] == category] if category else json.loads(data["content_list"])
 
     def get_current(self):
         data = self._send_art_request(
@@ -176,7 +176,8 @@ class SamsungTVArt(SamsungTVWSConnection):
         assert data
         return data
         
-    def set_favourite(self, content_id, status='on'):
+    def set_favourite(self, content_id, status="on"):
+        status = "on" if is_true(status) else "off"
         data = self._send_art_request(
             {   "request": "change_favorite",
                 "content_id": content_id,
@@ -249,6 +250,7 @@ class SamsungTVArt(SamsungTVWSConnection):
         return data['value']
 
     def set_brightness(self, value):
+        # "0" to "10"
         data = self._send_art_request(
             {"request": "set_brightness", "value": value}
         )
@@ -266,8 +268,33 @@ class SamsungTVArt(SamsungTVWSConnection):
         return data['value']
 
     def set_color_temperature(self, value):
+        # "-5" to "5"
         data = self._send_art_request(
             {"request": "set_color_temperature", "value": value}
+        )
+        assert data
+        return data
+        
+    def set_brightness_sensor_setting(self, value):
+        value = "on" if is_true(value) else "off"
+        data = self._send_art_request(
+            {"request": "set_brightness_sensor_setting", "value": value}
+        )
+        assert data
+        return data
+        
+    def set_motion_timer(self, value):
+        # "off", "5", "15", "30", "60", "120","240" 
+        data = self._send_art_request(
+            {"request": "set_motion_timer", "value": value}
+        )
+        assert data
+        return data
+        
+    def set_motion_sensitivity(self, value):
+        # "1" to "3"
+        data = self._send_art_request(
+            {"request": "set_motion_sensitivity", "value": value}
         )
         assert data
         return data
@@ -436,6 +463,7 @@ class SamsungTVArt(SamsungTVWSConnection):
         return data["value"]
 
     def set_artmode(self, mode):
+        mode = "on" if is_true(mode) else "off"
         self._send_art_request(
             {
                 "request": "set_artmode_status",
