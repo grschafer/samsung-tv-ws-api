@@ -454,7 +454,11 @@ class monitor_and_display:
         '''
         get last updated timestamp for file
         '''
-        return os.path.getmtime(os.path.join(self.folder, filename))
+        try:
+            return os.path.getmtime(os.path.join(self.folder, filename))
+        except Exception as e:
+            self.log.warning('error: {}, returning current timestamp'.format(e))
+        return int(time.time())
         
     async def remove_files(self, files):
         '''
