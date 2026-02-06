@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-# fully async example program to monitor a folder and upload/display on Frame TV
+# fully async example program to monitor one or more folders and upload/display on Frame TV
 # NOTE: install Pillow (pip install Pillow) to automatically syncronize art on TV wth uploaded_files.json.
 
 '''
-This program will read the files in a designated folder (with allowed extensions) and upload them to your TV. It keeps track of which files correspond to what
+This program will read the files in one or more designated folders (with allowed extensions) and upload them to your TV. It keeps track of which files correspond to what
 content_id on your TV by saving the data in a file called uploaded_files.json. it also keeps track of when the selected artwork was last changed.
 
-It monitors the folder for changes every check seconds (5 by default), new files are uploaded to the TV, removed files are deleted from the TV, and if a file
+It monitors the folders for changes every check seconds (5 by default), new files are uploaded to the TV, removed files are deleted from the TV, and if a file
 is changed, the old content is removed from the TV and the new content uploaded to the TV. Content is only changed if the TV is in art mode.
 
 if check is set to 0 seconds, the program will run once and exit. You can then run it periodically (say with a cron job).
 
-if there is more than one file in the folder, the current artword displayed is changed every update minutes (0) by default (which means do not select any artwork),
-otherwise the single file in the folder is selected to be displayed. this also only happens when the TV is in art mode.
+if there is more than one file across the folders, the current artwork displayed is changed every update minutes (0) by default (which means do not select any artwork),
+otherwise the single file is selected to be displayed. this also only happens when the TV is in art mode.
 
 If you have PIL installed, the initial syncronization is automatic, the first time the program is run.
 
@@ -22,29 +22,33 @@ The default checking period is 60 seconds or the update period whichever is less
 
 Example:
     1) Your TV is used to display one image, that changes every day, you have a program that grabs the image and puts it in a folder. The image always has the same name.
-       run ./async_art_update_from_folder.py <tv_ip> -f <folder_path> -c 0
-       to update the image on the Tv after the script that grabs the file runs
+       run ./async_art_update_from_directory.py <tv_ip> -f <folder_path> -c 0
+       to update the image on the TV after the script that grabs the file runs
        If you are unsure if the TV will be on when you run the program
-       run ./async_art_update_from_folder.py <tv_ip> -f <folder_path> -c 0 -O
+       run ./async_art_update_from_directory.py <tv_ip> -f <folder_path> -c 0 -O
        or
-       run ./async_art_update_from_folder.py <tv_ip> -f <folder_path> -c 60
+       run ./async_art_update_from_directory.py <tv_ip> -f <folder_path> -c 60
        and leave it running
+
+    2) Sync from multiple folders (e.g. local and network share):
+       run ./async_art_update_from_directory.py <tv_ip> -f <folder1> <folder2> -u 1
+       and leave it running. Add/remove art from any of the folders to include it/remove it from the slideshow.
        
-    2) You use your TV to display your own artwork, you want a slideshow that displays a random artwork every minute, but want to add/remove art from a network share
-       run ./async_art_update_from_folder.py <tv_ip> -f <folder_path_to_share> -u 1
+    3) You use your TV to display your own artwork, you want a slideshow that displays a random artwork every minute, but want to add/remove art from a network share
+       run ./async_art_update_from_directory.py <tv_ip> -f <folder_path_to_share> -u 1
        and leave it running. Add/remove art from the network share folder to include it/remove it from the slideshow.
        If you want an update every 15 seconds
-       run ./async_art_update_from_folder.py <tv_ip> -f <folder_path_to_share> -u 0.25
+       run ./async_art_update_from_directory.py <tv_ip> -f <folder_path_to_share> -u 0.25
        
-    3) you have artwork on the TV marked as "favourites", but want to inclue your own artwork from a folder in a random slideshow that updates once a day
-       run ./async_art_update_from_folder.py <tv_ip> -f <folder_path> -c 3600 -u 1440 -F
+    4) you have artwork on the TV marked as "favourites", but want to include your own artwork from folders in a random slideshow that updates once a day
+       run ./async_art_update_from_directory.py <tv_ip> -f <folder_path> -c 3600 -u 1440 -F
        and leave it running. Add/remove art from the folder to include it/remove it from the slideshow.
        
-    4) You have some standard art uploaded to your TV, that you slideshow from the TV, but want to add seasonal artworks to the slideshow that you change from time to time.
-       run ./async_art_update_from_folder.py <tv_ip> -f <folder_path> -c 3600
-       and leave it running. Add/remove art from the folder to include it/remove it from the slideshow.
+    5) You have some standard art uploaded to your TV, that you slideshow from the TV, but want to add seasonal artworks from multiple folders to the slideshow.
+       run ./async_art_update_from_directory.py <tv_ip> -f <folder1> <folder2> -c 3600
+       and leave it running. Add/remove art from the folders to include it/remove it from the slideshow.
        or
-       run ./async_art_update_from_folder.py <tv_ip> -f <folder_path> -c 0 -O
+       run ./async_art_update_from_directory.py <tv_ip> -f <folder_path> -c 0 -O
        after updating the files in the folder
 '''
 
@@ -76,7 +80,7 @@ def parseargs():
     # Add command line argument parsing
     parser = argparse.ArgumentParser(description='Async Upload images to Samsung TV Version: {}'.format(__version__))
     parser.add_argument('ip', action="store", type=str, default=None, help='ip address of TV (default: %(default)s))')
-    parser.add_argument('-f','--folder', action="store", type=str, default="./images", help='folder to load images from (default: %(default)s))')
+    parser.add_argument('-f','--folder', nargs='+', default=['./images'], help='one or more folders to load images from (default: %(default)s)')
     parser.add_argument('-m','--matte', action="store", type=str, default="none", help='default matte to use (default: %(default)s))')
     parser.add_argument('-t','--token_file', action="store", type=str, default="token_file.txt", help='default token file to use (default: %(default)s))')
     parser.add_argument('-u','--update', action="store", type=float, default=0, help='slideshow update period (mins) 0=off (default: %(default)s))')
@@ -93,7 +97,7 @@ class PIL_methods:
     def __init__(self, mon):
         self.log = logging.getLogger('Main.'+__class__.__name__)
         self.mon = mon
-        self.folder = self.mon.folder
+        self.folders = self.mon.folders
         self.uploaded_files = self.mon.uploaded_files
         
     async def initialize(self):
@@ -155,7 +159,7 @@ class PIL_methods:
         
     def load_files(self):
         '''
-        reads folder files, and returns dictionary of filenames and binary data
+        reads files from all folders (full paths), returns dictionary of path -> binary data
         only used if PIL is installed
         '''
         files = self.mon.get_folder_files()
@@ -166,20 +170,20 @@ class PIL_methods:
         
     def get_files_dict(self, files):
         '''
-        makes a dictionary of filename and file binary data
+        makes a dictionary of full path and file binary data (files is list of full paths)
         warns if file type given by extension is wrong
         only used if PIL is installed
         '''
         files_images = {}
-        for file in files:
+        for path in files:
             try:
-                data = Image.open(os.path.join(self.folder, file))
-                format = self.mon.get_file_type(os.path.join(self.folder, file), data)
-                if not (file.lower().endswith(format) or (format=='jpeg' and file.lower().endswith('jpg'))):
-                    self.log.warning('file: {} is of type {}, the extension is wrong! please fix this'.format(file, format))
-                files_images[file] = data
+                data = Image.open(path)
+                format = self.mon.get_file_type(path, data)
+                if not (path.lower().endswith(format) or (format == 'jpeg' and path.lower().endswith('jpg'))):
+                    self.log.warning('file: {} is of type {}, the extension is wrong! please fix this'.format(path, format))
+                files_images[path] = data
             except Exception as e:
-                self.log.warning('Error loading: {}, {}'.format(file, e))
+                self.log.warning('Error loading: {}, {}'.format(path, e))
         return files_images
         
     async def get_thumbnails(self, content_ids):
@@ -224,11 +228,11 @@ class monitor_and_display:
     
     allowed_ext = ['jpg', 'jpeg', 'png', 'bmp', 'tif']
     
-    def __init__(self, ip, folder, period=5, update_time=1440, include_fav=False, sync=True, matte='none', sequential=False, on=False, token_file=None):
+    def __init__(self, ip, folders, period=5, update_time=1440, include_fav=False, sync=True, matte='none', sequential=False, on=False, token_file=None):
         self.log = logging.getLogger('Main.'+__class__.__name__)
         self.debug = self.log.getEffectiveLevel() <= logging.DEBUG
         self.ip = ip
-        self.folder = folder
+        self.folders = [os.path.normpath(d) for d in folders]
         self.update_time = int(max(0, update_time*60))   #convert minutes to seconds
         self.period = min(max(5, period), self.update_time) if self.update_time > 0 else period
         self.include_fav = include_fav
@@ -318,7 +322,8 @@ class monitor_and_display:
         self.current_content_id = await self.get_current_artwork()
         self.log.info('Current artwork is: {}'.format(self.current_content_id))
         self.load_program_data()
-        self.log.info('files in directory: {}: {}'.format(self.folder, self.get_folder_files()))
+        folders_msg = self.folders[0] if len(self.folders) == 1 else '{} (and {} more)'.format(self.folders[0], len(self.folders) - 1)
+        self.log.info('files in director{}: {}: {}'.format('y' if len(self.folders) == 1 else 'ies', folders_msg, self.get_folder_files()))
         if self.sync:
             await self.pil.initialize() #optional
         else:
@@ -337,9 +342,17 @@ class monitor_and_display:
         
     def get_folder_files(self):
         '''
-        returns list of files in folder is extension matches allowed image types
+        returns list of full paths to files in all folders whose extension matches allowed image types
         '''
-        return [f for f in os.listdir(self.folder) if os.path.isfile(os.path.join(self.folder, f)) and self.get_file_type(os.path.join(self.folder, f)) in self.allowed_ext]
+        result = []
+        for folder in self.folders:
+            if not os.path.isdir(folder):
+                continue
+            for f in os.listdir(folder):
+                path = os.path.join(folder, f)
+                if os.path.isfile(path) and self.get_file_type(path) in self.allowed_ext:
+                    result.append(path)
+        return result
         
     async def get_current_artwork(self):
         '''
@@ -388,17 +401,17 @@ class monitor_and_display:
             program_data = {'last_update': self.start, 'uploaded_files': self.uploaded_files}
             json.dump(program_data, f)
             
-    def read_file(self, filename):
+    def read_file(self, path):
         '''
-        read image file, return file binary data and file type
+        read image file (path is full path), return file binary data and file type
         '''
         try:
-            with open(filename, 'rb') as f:
+            with open(path, 'rb') as f:
                 file_data = f.read()
-            file_type = self.get_file_type(filename)
+            file_type = self.get_file_type(path)
             return file_data, file_type
         except Exception as e:
-            self.log.error('Error reading file: {}, {}'.format(filename, e))
+            self.log.error('Error reading file: {}, {}'.format(path, e))
         return None, None
         
     def get_file_type(self, filename, image_data=None):
@@ -416,29 +429,28 @@ class monitor_and_display:
             self.log.error('Error reading file: {}, {}'.format(filename, e))
         return None
             
-    def update_uploaded_files(self, filename, content_id):
+    def update_uploaded_files(self, path, content_id):
         '''
-        if file is uploaded, update the dictionary entry
+        if file is uploaded, update the dictionary entry (path is full path)
         if content_id is None, file failed to upload, so remove it from the dict
         '''
-        self.uploaded_files.pop(filename, None)
+        self.uploaded_files.pop(path, None)
         if content_id:
-            self.uploaded_files[filename] = {'content_id': content_id, 'modified':self.get_last_updated(filename)}
+            self.uploaded_files[path] = {'content_id': content_id, 'modified': self.get_last_updated(path)}
         
-    async def upload_files(self, filenames):
+    async def upload_files(self, paths):
         '''
-        upload files in list to tv
+        upload files (full paths) to tv
         '''
-        for filename in filenames:
-            path = os.path.join(self.folder, filename)
+        for path in paths:
             file_data, file_type = self.read_file(path)
             if file_data and self.tv.art_mode:
-                self.log.info('uploading : {} to tv'.format(filename))
-                self.update_uploaded_files(filename, await self.tv.upload(file_data, file_type=file_type, matte=self.matte, portrait_matte=self.matte))
-                if self.uploaded_files.get(filename, {}).get('content_id'):
-                    self.log.info('uploaded : {} to tv as {}'.format(filename, self.uploaded_files[filename]['content_id']))
+                self.log.info('uploading : {} to tv'.format(path))
+                self.update_uploaded_files(path, await self.tv.upload(file_data, file_type=file_type, matte=self.matte, portrait_matte=self.matte))
+                if self.uploaded_files.get(path, {}).get('content_id'):
+                    self.log.info('uploaded : {} to tv as {}'.format(path, self.uploaded_files[path]['content_id']))
                 else:
-                    self.log.warning('file: {} failed to upload'.format(filename))
+                    self.log.warning('file: {} failed to upload'.format(path))
                 self.write_program_data()
             
     async def delete_files_from_tv(self, content_ids):
@@ -450,12 +462,12 @@ class monitor_and_display:
             await self.tv.delete_list(content_ids)
             await self.sync_file_list()
 
-    def get_last_updated(self, filename):
+    def get_last_updated(self, path):
         '''
-        get last updated timestamp for file
+        get last updated timestamp for file (path is full path)
         '''
         try:
-            return os.path.getmtime(os.path.join(self.folder, filename))
+            return os.path.getmtime(path)
         except Exception as e:
             self.log.warning('error: {}, returning current timestamp'.format(e))
         return int(time.time())
@@ -566,7 +578,8 @@ class monitor_and_display:
         '''
         try:
             if await self.tv.in_artmode():
-                self.log.info('checking directory: {}{}'.format(self.folder, ' every {}'.format(self.get_time(self.period)) if self.period else ''))
+                dir_msg = self.folders[0] if len(self.folders) == 1 else '{} folders'.format(len(self.folders))
+                self.log.info('checking director{}: {}{}'.format('y' if len(self.folders) == 1 else 'ies', dir_msg, ' every {}'.format(self.get_time(self.period)) if self.period else ''))
                 files = self.get_folder_files()
                 await self.sync_file_list()
                 await self.remove_files(files)
@@ -603,11 +616,11 @@ async def main():
         logging.getLogger().setLevel(logging.DEBUG)
     log.debug('Debug mode')
     
-    args.folder = os.path.normpath(args.folder)
-    
-    if not os.path.exists(args.folder):
-        log.warning('folder {} does not exist, exiting'.format(args.folder))
-        os._exit(1)
+    args.folder = [os.path.normpath(d) for d in args.folder]
+    for folder in args.folder:
+        if not os.path.exists(folder):
+            log.warning('folder {} does not exist, exiting'.format(folder))
+            os._exit(1)
     
     mon = monitor_and_display(  args.ip,
                                 args.folder,

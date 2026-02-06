@@ -1,0 +1,16 @@
+[Unit]
+Description=Immich Frame TV art sync — monitor library folders and sync art to Samsung Frame TV
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Adjust if your repo is installed elsewhere
+WorkingDirectory=/opt/immich-frametv-art-sync
+# Use bash so the glob /opt/immich/upload/library/*/FrameTV is expanded
+ExecStart=/bin/bash -c '/usr/bin/python3 /opt/immich-frametv-art-sync/example/async_art_update_from_directory.py 192.168.0.117 --folder /opt/immich/upload/library/*/FrameTV'
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
