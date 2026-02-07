@@ -28,13 +28,12 @@ Assumptions: Debian 13.3 (or similar) with Python 3.13.5 already installed.
 2. Clone this repo, create a virtual environment, and install the `samsungtvws` package (and its dependencies) and Pillow into the venv:
    ```bash
    cd /opt
-   sudo git clone <this-repo-url> immich-frametv-art-sync
+   sudo git clone https://github.com/grschafer/samsung-tv-ws-api.git immich-frametv-art-sync
    cd immich-frametv-art-sync
    sudo python3 -m venv .venv
    sudo .venv/bin/pip install -e .
    sudo .venv/bin/pip install Pillow
    ```
-   Replace `<this-repo-url>` with your clone URL (e.g. the upstream `https://github.com/NickWaterton/samsung-tv-ws-api.git` or your fork).
 
    The systemd unit is configured to use `.venv/bin/python3` in this repo. Pillow is needed so the script can auto-sync artwork with the TV’s “My Photos” list; without it the script still runs but won’t match already-uploaded art.
 
