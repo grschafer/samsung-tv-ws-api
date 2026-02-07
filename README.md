@@ -19,27 +19,24 @@ Assumptions: Debian 13.3 (or similar) with Python 3.13.5 already installed.
 
 **Prerequisites**
 
-1. Install pip (if not present) and a virtualenv (recommended):
+1. Install Python venv support (pip is not required for the venv; the venv will get pip):
    ```bash
    sudo apt update
-   sudo apt install -y python3-pip python3-venv
+   sudo apt install -y python3-venv
    ```
 
-2. Clone this repo and install the `samsungtvws` package (and its dependencies) used by the script. From the repo root:
+2. Clone this repo, create a virtual environment, and install the `samsungtvws` package (and its dependencies) and Pillow into the venv:
    ```bash
    cd /opt
    sudo git clone <this-repo-url> immich-frametv-art-sync
    cd immich-frametv-art-sync
-   sudo pip3 install -e .
+   sudo python3 -m venv .venv
+   sudo .venv/bin/pip install -e .
+   sudo .venv/bin/pip install Pillow
    ```
    Replace `<this-repo-url>` with your clone URL (e.g. the upstream `https://github.com/NickWaterton/samsung-tv-ws-api.git` or your fork).
-   (Or use a venv and install with `pip install -e .` there; then point the systemd unit at that Python/interpreter if you prefer.)
 
-3. Install Pillow so the script can sync art and match uploaded files (recommended):
-   ```bash
-   sudo pip3 install Pillow
-   ```
-   If Pillow is not installed, the script still runs but will not auto-sync artwork with the TV’s “My Photos” list.
+   The systemd unit is configured to use `.venv/bin/python3` in this repo. Pillow is needed so the script can auto-sync artwork with the TV’s “My Photos” list; without it the script still runs but won’t match already-uploaded art.
 
 **Install and enable the systemd service**
 
